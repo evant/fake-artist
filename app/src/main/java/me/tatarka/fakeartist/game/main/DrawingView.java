@@ -4,6 +4,10 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.Path;
+import android.os.Parcel;
+import android.os.Parcelable;
+import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
@@ -14,15 +18,20 @@ import java.util.Arrays;
 import me.tatarka.fakeartist.R;
 
 public class DrawingView extends View {
-    public static final int CANVAS_HEIGHT = 800;
+    private static final int CANVAS_HEIGHT = 800;
+    private static final int CANVAS_WIDTH = 600;
+
     private Drawing drawing;
-    private int currentPlayer = 0;
-    private float[] currentPoints = new float[16];
-    private int currentPointsLength = 0;
+    private int currentPlayer;
     private boolean lineDrawn;
     private OnLineDoneListener lineDoneListener;
-    private Paint linePaint;
-    private int CANVAS_WIDTH;
+
+    private final Paint linePaint;
+    private Path[] paths;
+
+    private int[] currentPoints;
+    private int currentPointsLength;
+    private final Path currentPath;
 
     public DrawingView(Context context) {
         this(context, null);
@@ -34,10 +43,21 @@ public class DrawingView extends View {
         linePaint.setAntiAlias(true);
         linePaint.setColor(Color.BLACK);
         linePaint.setStrokeWidth(getResources().getDimensionPixelSize(R.dimen.line_width));
+        linePaint.setStyle(Paint.Style.STROKE);
+        currentPath = new Path();
+        currentPoints = new int[16];
     }
 
     public void setDrawing(Drawing drawing) {
         this.drawing = drawing;
+        if (paths == null || paths.length < drawing.playerCount * 2) {
+            paths = new Path[drawing.playerCount * 2];
+        }
+        for (int i = 0; i < drawing.lines.size(); i++) {
+            Drawing.Line line = drawing.lines.get(i);
+            paths[i] = lineToPath(paths[i], line);
+        }
+        currentPath.reset();
         currentPointsLength = 0;
         lineDrawn = false;
         invalidate();
@@ -63,6 +83,7 @@ public class DrawingView extends View {
         if (drawing == null) {
             return;
         }
+        currentPath.reset();
         currentPointsLength = 0;
         lineDrawn = false;
         invalidate();
@@ -73,25 +94,46 @@ public class DrawingView extends View {
             return;
         }
         Drawing.Line line = new Drawing.Line(currentPlayer, Arrays.copyOf(currentPoints, currentPointsLength));
+        paths[drawing.lines.size()] = lineToPath(paths[drawing.lines.size()], line);
         drawing.lines.add(line);
+        currentPath.reset();
         currentPointsLength = 0;
         lineDrawn = false;
     }
 
-    private void addCurrentPoint(float x, float y) {
-        if ((currentPointsLength + 4) >= currentPoints.length) {
-            float[] newPoints = new float[currentPoints.length * 2];
+    private Path lineToPath(@Nullable Path path, Drawing.Line line) {
+        if (path == null) {
+            path = new Path();
+        } else {
+            path.reset();
+        }
+        if (line.points.length > 2) {
+            path.moveTo(line.points[0], line.points[1]);
+        }
+        for (int i = 2; i < line.points.length; i += 2) {
+            path.lineTo(line.points[i], line.points[i + 1]);
+        }
+        return path;
+    }
+
+    private void addCurrentPoint(int x, int y) {
+        if (currentPath.isEmpty()) {
+            currentPath.moveTo(x, y);
+        } else {
+            currentPath.lineTo(x, y);
+        }
+        if ((currentPointsLength + 2) >= currentPoints.length) {
+            int[] newPoints = new int[currentPoints.length * 2];
             System.arraycopy(currentPoints, 0, newPoints, 0, currentPoints.length);
             currentPoints = newPoints;
-        }
-        if (currentPointsLength > 2) {
-            currentPoints[currentPointsLength] = currentPoints[currentPointsLength - 2];
-            currentPoints[currentPointsLength + 1] = currentPoints[currentPointsLength - 1];
-            currentPointsLength += 2;
         }
         currentPoints[currentPointsLength] = x;
         currentPoints[currentPointsLength + 1] = y;
         currentPointsLength += 2;
+    }
+
+    private int scalePoint(float point, int viewSize, int targetSize) {
+        return Math.round(point * targetSize / viewSize);
     }
 
     @Override
@@ -104,11 +146,11 @@ public class DrawingView extends View {
         for (int i = 0, size = lines.size(); i < size; i++) {
             Drawing.Line line = lines.get(i);
             linePaint.setColor(drawing.colorPallet[line.player]);
-            canvas.drawLines(line.points, linePaint);
+            canvas.drawPath(paths[i], linePaint);
         }
-        if (currentPointsLength > 2) {
+        if (!currentPath.isEmpty()) {
             linePaint.setColor(drawing.colorPallet[currentPlayer]);
-            canvas.drawLines(currentPoints, 0, currentPointsLength, linePaint);
+            canvas.drawPath(currentPath, linePaint);
         }
     }
 
@@ -119,21 +161,20 @@ public class DrawingView extends View {
         }
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN: {
-                float scaledX = event.getX() * CANVAS_WIDTH / getWidth();
-                float scaledY = event.getY() * CANVAS_HEIGHT / getHeight();
+                int scaledX = scalePoint(event.getX(), getWidth(), CANVAS_WIDTH);
+                int scaledY = scalePoint(event.getY(), getHeight(), CANVAS_HEIGHT);
                 addCurrentPoint(scaledX, scaledY);
-                invalidate();
             }
-                break;
+            break;
             case MotionEvent.ACTION_MOVE: {
                 for (int i = 0; i < event.getHistorySize(); i++) {
-                    float scaledX = event.getHistoricalX(i) * CANVAS_WIDTH / getWidth();
-                    float scaledY = event.getHistoricalY(i) * CANVAS_HEIGHT / getHeight();
+                    int scaledX = scalePoint(event.getHistoricalX(i), getWidth(), CANVAS_WIDTH);
+                    int scaledY = scalePoint(event.getHistoricalY(i), getHeight(), CANVAS_HEIGHT);
                     addCurrentPoint(scaledX, scaledY);
                 }
                 invalidate();
             }
-                break;
+            break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL: {
                 lineDrawn = true;
@@ -141,7 +182,7 @@ public class DrawingView extends View {
                     lineDoneListener.onLineDone();
                 }
             }
-                break;
+            break;
         }
         return true;
     }
@@ -158,7 +199,6 @@ public class DrawingView extends View {
             width = 0;
             height = 0;
         } else {
-            CANVAS_WIDTH = 600;
             if (height <= 0 && heightMode == MeasureSpec.UNSPECIFIED) {
                 height = width * CANVAS_HEIGHT / CANVAS_WIDTH;
             } else if (width <= 0 && widthMode == MeasureSpec.UNSPECIFIED) {
@@ -175,8 +215,76 @@ public class DrawingView extends View {
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
     }
 
+    @Override
+    protected Parcelable onSaveInstanceState() {
+        SavedState state = new SavedState(super.onSaveInstanceState());
+        state.drawing = drawing;
+        state.currentPlayer = currentPlayer;
+        state.currentPoints = Arrays.copyOf(currentPoints, currentPointsLength);
+        return state;
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Parcelable parcelable) {
+        SavedState state = (SavedState) parcelable;
+        super.onRestoreInstanceState(state.getSuperState());
+        setDrawing(state.drawing);
+        currentPlayer = state.currentPlayer;
+        if (state.currentPoints.length > 0) {
+            currentPoints = state.currentPoints;
+            currentPointsLength = state.currentPoints.length;
+            for (int i = 0; i < currentPointsLength; i += 2) {
+                if (currentPath.isEmpty()) {
+                    currentPath.moveTo(currentPoints[i], currentPoints[i + 1]);
+                } else {
+                    currentPath.lineTo(currentPoints[i], currentPoints[i + 1]);
+                }
+            }
+            lineDrawn = true;
+            if (lineDoneListener != null) {
+                lineDoneListener.onLineDone();
+            }
+        }
+    }
 
     public interface OnLineDoneListener {
         void onLineDone();
+    }
+
+    static class SavedState extends BaseSavedState {
+        Drawing drawing;
+        int currentPlayer;
+        int[] currentPoints;
+
+        SavedState(Parcelable superState) {
+            super(superState);
+        }
+
+        SavedState(Parcel source) {
+            super(source);
+            drawing = source.readParcelable(getClass().getClassLoader());
+            currentPlayer = source.readInt();
+            currentPoints = source.createIntArray();
+        }
+
+        @Override
+        public void writeToParcel(Parcel out, int flags) {
+            super.writeToParcel(out, flags);
+            out.writeParcelable(drawing, flags);
+            out.writeInt(currentPlayer);
+            out.writeIntArray(currentPoints);
+        }
+
+        public static final Creator<SavedState> CREATOR = new Creator<SavedState>() {
+            @Override
+            public SavedState createFromParcel(Parcel source) {
+                return new SavedState(source);
+            }
+
+            @Override
+            public SavedState[] newArray(int size) {
+                return new SavedState[size];
+            }
+        };
     }
 }

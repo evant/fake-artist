@@ -24,7 +24,9 @@ public class GameActivity extends RetainActivity {
         final ImageButton undo = (ImageButton) findViewById(R.id.button_undo);
         final ImageButton done = (ImageButton) findViewById(R.id.button_done);
         
-        drawingView.setDrawing(new Drawing(getResources()));
+        if (savedInstanceState == null) {
+            drawingView.setDrawing(new Drawing(getResources(), 3));
+        }
 
         drawingView.setOnLineDoneListener(new DrawingView.OnLineDoneListener() {
             @Override
