@@ -1,0 +1,13 @@
+<resources>
+    <string name="app_name">Fake Artist</string>
+    <string name="create">Create</string>
+    <string name="join">Join</string>
+    <string name="start">Start</string>
+    <string name="category">Category</string>
+    <string name="title">Title</string>
+    <string name="waiting_for_game_master">Waiting for Game Master</string>
+    <string name="submit">Submit</string>
+    <string name="room">Room</string>
+    <string name="go_back">Go Back</string>
+    <string name="user_name">User Name</string>
+</resources>
