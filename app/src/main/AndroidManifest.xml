@@ -23,6 +23,8 @@
         <activity android:name=".game.lobby.GameLobbyActivity" />
 
         <activity android:name=".game.main.GameActivity" />
+
+        <activity android:name=".game.qm.QmActivity" />
     </application>
 
 </manifest>

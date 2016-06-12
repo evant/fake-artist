@@ -1,31 +1,39 @@
 package me.tatarka.fakeartist.game.main;
 
-import android.content.res.Resources;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.support.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-import me.tatarka.fakeartist.R;
+import me.tatarka.fakeartist.util.Encoding;
 
 public class Drawing implements Parcelable {
 
-    public final int playerCount;
-    public final int[] colorPallet;
-    public final ArrayList<Line> lines;
+    public final int[] colors;
+    public final List<Line> lines;
 
-    public Drawing(Resources res, int playerCount) {
-        this.playerCount = playerCount;
-        lines = new ArrayList<>();
-        // TODO: change? Randomize?
-        int pink = res.getColor(R.color.pink);
-        int blue = res.getColor(R.color.blue);
-        int orange = res.getColor(R.color.orange);
-        colorPallet = new int[]{
-                pink, blue, orange
-        };
+    public Drawing(int[] colors, List<Line> lines) {
+        this.colors = colors;
+        this.lines = Collections.unmodifiableList(lines);
     }
-    
+
+    @Nullable
+    public Line lastLine() {
+        if (lines.isEmpty()) {
+            return null;
+        }
+        return lines.get(lines.size() - 1);
+    }
+
+    public Drawing withNewLine(Line line) {
+        ArrayList<Line> newLines = new ArrayList<>(lines);
+        newLines.add(line);
+        return new Drawing(colors, newLines);
+    }
+
     public static class Line implements Parcelable {
         public final int player;
         public final int[] points;
@@ -68,18 +76,25 @@ public class Drawing implements Parcelable {
                 return new Line[size];
             }
         };
+
+        public String serialize() {
+            return Encoding.toBase64(Encoding.deflate(Encoding.deltaEncode(points)));
+        }
+
+        public static Line deserialize(int player, String data) {
+            int[] points = Encoding.deltaDecode(Encoding.inflate(Encoding.fromBase64(data)));
+            return new Line(player, points);
+        }
     }
 
     protected Drawing(Parcel in) {
-        playerCount = in.readInt();
-        colorPallet = in.createIntArray();
+        colors = in.createIntArray();
         lines = in.createTypedArrayList(Line.CREATOR);
     }
 
     @Override
     public void writeToParcel(Parcel dest, int flags) {
-        dest.writeInt(playerCount);
-        dest.writeIntArray(colorPallet);
+        dest.writeIntArray(colors);
         dest.writeTypedList(lines);
     }
 

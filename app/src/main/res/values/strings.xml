@@ -5,9 +5,19 @@
     <string name="start">Start</string>
     <string name="category">Category</string>
     <string name="title">Title</string>
-    <string name="waiting_for_game_master">Waiting for Game Master</string>
+    <string name="waiting_for_quiz_master">Waiting for Quiz Master</string>
+    <string name="waiting_for_other_players">Waiting for Other Players</string>
+    <string name="info_category">Category: %s</string>
+    <string name="info_title">Title: %s</string>
+    <string name="info_role">Role: %s</string>
     <string name="submit">Submit</string>
     <string name="room">Room</string>
     <string name="go_back">Go Back</string>
     <string name="user_name">User Name</string>
+    <string name="ready">Ready</string>
+    <string name="quiz_master">Quiz Master</string>
+    <string name="fake_artist">Fake Artist</string>
+    <string name="artist">Artist</string>
+    <string name="setup">Setup</string>
+    <string name="your_turn">Your Turn</string>
 </resources>

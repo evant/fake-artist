@@ -14,15 +14,18 @@ import android.view.View;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 
 import me.tatarka.fakeartist.R;
 
 public class DrawingView extends View {
     private static final int CANVAS_HEIGHT = 800;
     private static final int CANVAS_WIDTH = 600;
+    private static final int POINT_LIMIT = 500;
+    private static final int MIN_POINT_DELTA = 8;
 
     private Drawing drawing;
-    private int currentPlayer;
+    private int player;
     private boolean lineDrawn;
     private OnLineDoneListener lineDoneListener;
 
@@ -32,6 +35,8 @@ public class DrawingView extends View {
     private int[] currentPoints;
     private int currentPointsLength;
     private final Path currentPath;
+    private int lastX;
+    private int lastY;
 
     public DrawingView(Context context) {
         this(context, null);
@@ -50,8 +55,8 @@ public class DrawingView extends View {
 
     public void setDrawing(Drawing drawing) {
         this.drawing = drawing;
-        if (paths == null || paths.length < drawing.playerCount * 2) {
-            paths = new Path[drawing.playerCount * 2];
+        if (paths == null || paths.length < drawing.colors.length * 2) {
+            paths = new Path[drawing.colors.length * 2];
         }
         for (int i = 0; i < drawing.lines.size(); i++) {
             Drawing.Line line = drawing.lines.get(i);
@@ -62,17 +67,17 @@ public class DrawingView extends View {
         lineDrawn = false;
         invalidate();
     }
+    
+    public void setPlayer(int player) {
+        this.player = player;
+    }
 
     public Drawing getDrawing() {
         return drawing;
     }
-
-    public void setCurrentPlayer(int currentPlayer) {
-        this.currentPlayer = currentPlayer;
-    }
-
-    public int getCurrentPlayer() {
-        return currentPlayer;
+    
+    public int getPlayer() {
+        return player;
     }
 
     public void setOnLineDoneListener(OnLineDoneListener listener) {
@@ -93,9 +98,9 @@ public class DrawingView extends View {
         if (drawing == null) {
             return;
         }
-        Drawing.Line line = new Drawing.Line(currentPlayer, Arrays.copyOf(currentPoints, currentPointsLength));
+        Drawing.Line line = new Drawing.Line(player, Arrays.copyOf(currentPoints, currentPointsLength));
         paths[drawing.lines.size()] = lineToPath(paths[drawing.lines.size()], line);
-        drawing.lines.add(line);
+        drawing = drawing.withNewLine(line);
         currentPath.reset();
         currentPointsLength = 0;
         lineDrawn = false;
@@ -116,7 +121,10 @@ public class DrawingView extends View {
         return path;
     }
 
-    private void addCurrentPoint(int x, int y) {
+    private boolean addCurrentPoint(int x, int y) {
+        if (currentPointsLength >= POINT_LIMIT) {
+            return false;
+        }
         if (currentPath.isEmpty()) {
             currentPath.moveTo(x, y);
         } else {
@@ -130,6 +138,7 @@ public class DrawingView extends View {
         currentPoints[currentPointsLength] = x;
         currentPoints[currentPointsLength + 1] = y;
         currentPointsLength += 2;
+        return true;
     }
 
     private int scalePoint(float point, int viewSize, int targetSize) {
@@ -142,14 +151,14 @@ public class DrawingView extends View {
             return;
         }
         canvas.scale(getWidth() / (float) CANVAS_WIDTH, getHeight() / (float) CANVAS_HEIGHT);
-        ArrayList<Drawing.Line> lines = drawing.lines;
+        List<Drawing.Line> lines = drawing.lines;
         for (int i = 0, size = lines.size(); i < size; i++) {
             Drawing.Line line = lines.get(i);
-            linePaint.setColor(drawing.colorPallet[line.player]);
+            linePaint.setColor(drawing.colors[line.player]);
             canvas.drawPath(paths[i], linePaint);
         }
         if (!currentPath.isEmpty()) {
-            linePaint.setColor(drawing.colorPallet[currentPlayer]);
+            linePaint.setColor(drawing.colors[player]);
             canvas.drawPath(currentPath, linePaint);
         }
     }
@@ -161,16 +170,37 @@ public class DrawingView extends View {
         }
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN: {
-                int scaledX = scalePoint(event.getX(), getWidth(), CANVAS_WIDTH);
-                int scaledY = scalePoint(event.getY(), getHeight(), CANVAS_HEIGHT);
-                addCurrentPoint(scaledX, scaledY);
+                lastX = scalePoint(event.getX(), getWidth(), CANVAS_WIDTH);
+                lastY = scalePoint(event.getY(), getHeight(), CANVAS_HEIGHT);
+                addCurrentPoint(lastX, lastY);
             }
             break;
             case MotionEvent.ACTION_MOVE: {
                 for (int i = 0; i < event.getHistorySize(); i++) {
-                    int scaledX = scalePoint(event.getHistoricalX(i), getWidth(), CANVAS_WIDTH);
-                    int scaledY = scalePoint(event.getHistoricalY(i), getHeight(), CANVAS_HEIGHT);
-                    addCurrentPoint(scaledX, scaledY);
+                    float x = event.getHistoricalX(i);
+                    float y = event.getHistoricalY(i);
+                    // skip points outside the canvas
+                    if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) {
+                        continue;
+                    }
+                    int scaledX = scalePoint(x, getWidth(), CANVAS_WIDTH);
+                    int scaledY = scalePoint(y, getHeight(), CANVAS_HEIGHT);
+                    // Don't add point if we haven't moved enough. Instead, move the last point to
+                    // the current position so drawing still feels smooth.
+                    if (Math.abs(lastX - scaledX) < MIN_POINT_DELTA && Math.abs(lastY - scaledY) < MIN_POINT_DELTA) {
+                        currentPoints[currentPointsLength - 2] = scaledX;
+                        currentPoints[currentPointsLength - 1] = scaledY;
+                        continue;
+                    } else {
+                        currentPoints[currentPointsLength - 2] = lastX;
+                        currentPoints[currentPointsLength - 1] = lastY;
+                    }
+                    lastX = scaledX;
+                    lastY = scaledY;
+                    if (!addCurrentPoint(scaledX, scaledY)) {
+                        lineDrawn = true;
+                        break;
+                    }
                 }
                 invalidate();
             }
@@ -219,7 +249,7 @@ public class DrawingView extends View {
     protected Parcelable onSaveInstanceState() {
         SavedState state = new SavedState(super.onSaveInstanceState());
         state.drawing = drawing;
-        state.currentPlayer = currentPlayer;
+        state.player = player;
         state.currentPoints = Arrays.copyOf(currentPoints, currentPointsLength);
         return state;
     }
@@ -229,7 +259,7 @@ public class DrawingView extends View {
         SavedState state = (SavedState) parcelable;
         super.onRestoreInstanceState(state.getSuperState());
         setDrawing(state.drawing);
-        currentPlayer = state.currentPlayer;
+        setPlayer(state.player);
         if (state.currentPoints.length > 0) {
             currentPoints = state.currentPoints;
             currentPointsLength = state.currentPoints.length;
@@ -253,7 +283,7 @@ public class DrawingView extends View {
 
     static class SavedState extends BaseSavedState {
         Drawing drawing;
-        int currentPlayer;
+        int player;
         int[] currentPoints;
 
         SavedState(Parcelable superState) {
@@ -263,7 +293,7 @@ public class DrawingView extends View {
         SavedState(Parcel source) {
             super(source);
             drawing = source.readParcelable(getClass().getClassLoader());
-            currentPlayer = source.readInt();
+            player = source.readInt();
             currentPoints = source.createIntArray();
         }
 
@@ -271,7 +301,7 @@ public class DrawingView extends View {
         public void writeToParcel(Parcel out, int flags) {
             super.writeToParcel(out, flags);
             out.writeParcelable(drawing, flags);
-            out.writeInt(currentPlayer);
+            out.writeInt(player);
             out.writeIntArray(currentPoints);
         }
 

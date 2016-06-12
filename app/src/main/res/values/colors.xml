@@ -10,4 +10,5 @@
     <color name="indigo">#3F51B5</color>
     <color name="green">#4CAF50</color>
     <color name="orange">#FF5722</color>
+    <color name="tranlucent">#72000000</color>
 </resources>

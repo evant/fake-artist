@@ -7,12 +7,12 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 import me.tatarka.fakeartist.R;
-import me.tatarka.fakeartist.api.Room;
+import me.tatarka.fakeartist.api.State;
 
 public class PlayersAdapter extends RecyclerView.Adapter<PlayersAdapter.Holder> {
 
     private String userName;
-    private Room room;
+    private State state;
 
     public PlayersAdapter(String userName) {
         super();
@@ -20,8 +20,8 @@ public class PlayersAdapter extends RecyclerView.Adapter<PlayersAdapter.Holder> 
         setHasStableIds(true);
     }
 
-    public void setRoom(Room room) {
-        this.room = room;
+    public void setState(State state) {
+        this.state = state;
         notifyDataSetChanged();
     }
 
@@ -33,22 +33,22 @@ public class PlayersAdapter extends RecyclerView.Adapter<PlayersAdapter.Holder> 
 
     @Override
     public void onBindViewHolder(Holder holder, int position) {
-        holder.bind(room.players.get(position));
+        holder.bind(state.players.get(position));
     }
 
     @Override
     public int getItemCount() {
-        return room == null ? 0 : room.players.size();
+        return state == null ? 0 : state.players.size();
     }
 
     @Override
     public long getItemId(int position) {
-        return room.players.get(position).hashCode();
+        return state.players.get(position).hashCode();
     }
 
     @Override
     public int getItemViewType(int position) {
-        return room.players.get(position).equals(userName)
+        return state.players.get(position).equals(userName)
                 ? R.layout.loppy_player_item : R.layout.lobby_item;
     }
 
@@ -57,7 +57,7 @@ public class PlayersAdapter extends RecyclerView.Adapter<PlayersAdapter.Holder> 
 
         public Holder(View itemView) {
             super(itemView);
-            name = (TextView) itemView.findViewById(R.id.name);
+            name = (TextView) itemView.findViewById(R.id.username);
         }
 
         void bind(String player) {
