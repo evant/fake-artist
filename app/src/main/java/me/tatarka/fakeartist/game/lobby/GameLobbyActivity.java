@@ -34,18 +34,33 @@ public class GameLobbyActivity extends RetainActivity implements QmDialogFragmen
     private static final String TAG = "GameLobbyActivity";
     private static final String EXTRA_USER_NAME = "user_name";
     private static final String EXTRA_ROOM_NAME = "room_name";
+    private static final String EXTRA_STATE = "state";
+    private static final String EXTRA_MODE = "mode";
     private static final String TAG_QM = "qm";
     private static final String KEY_STATE = "state";
+    private static final int MODE_CREATE = 1;
+    private static final int MODE_JOIN = 2;
+    private static final int MODE_NEXT = 3;
 
     public static Intent newIntentCreate(Context context, String userName) {
         return new Intent(context, GameLobbyActivity.class)
-                .putExtra(EXTRA_USER_NAME, userName);
+                .putExtra(EXTRA_USER_NAME, userName)
+                .putExtra(EXTRA_MODE, MODE_CREATE);
     }
 
     public static Intent newIntentJoin(Context context, String userName, String roomName) {
         return new Intent(context, GameLobbyActivity.class)
                 .putExtra(EXTRA_USER_NAME, userName)
-                .putExtra(EXTRA_ROOM_NAME, roomName);
+                .putExtra(EXTRA_ROOM_NAME, roomName)
+                .putExtra(EXTRA_MODE, MODE_JOIN);
+    }
+
+    public static Intent newIntentNext(Context context, State state) {
+        return new Intent(context, GameLobbyActivity.class)
+                .putExtra(EXTRA_USER_NAME, state.userName)
+                .putExtra(EXTRA_ROOM_NAME, state.roomName)
+                .putExtra(EXTRA_STATE, state)
+                .putExtra(EXTRA_MODE, MODE_NEXT);
     }
 
     @Inject
@@ -58,6 +73,9 @@ public class GameLobbyActivity extends RetainActivity implements QmDialogFragmen
         Dagger.gameComponent().inject(this);
         final String userName = getIntent().getStringExtra(EXTRA_USER_NAME);
         String roomName = getIntent().getStringExtra(EXTRA_ROOM_NAME);
+        state = getIntent().getParcelableExtra(EXTRA_STATE);
+        int mode = getIntent().getIntExtra(EXTRA_MODE, 0);
+        
         setContentView(R.layout.lobby_main);
 
         final Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
@@ -91,19 +109,19 @@ public class GameLobbyActivity extends RetainActivity implements QmDialogFragmen
                     state = game.state;
                     toolbar.setTitle(game.state.roomName);
                     adapter.setState(game.state);
-                    
+
                     progress.setVisibility(game.event == Event.LOADING ? View.VISIBLE : View.GONE);
-                    info.setVisibility(game.event == Event.READY ? View.VISIBLE : View.GONE);
-                    info.setText(game.state.role() == State.Role.QM 
-                            ? R.string.waiting_for_other_players 
+                    info.setVisibility(game.state.ready ? View.VISIBLE : View.GONE);
+                    info.setText(game.state.role() == State.Role.QM
+                            ? R.string.waiting_for_other_players
                             : R.string.waiting_for_quiz_master);
-                    
-                    if (game.event != Event.READY && game.state.players.size() >= Game.MIN_PLAYERS) {
+
+                    if (!game.state.ready && game.state.players.size() >= Game.MIN_PLAYERS) {
                         ready.show();
                     } else {
                         ready.hide();
                     }
-                    
+
                     if (game.event == Event.START) {
                         startActivity(GameActivity.newIntent(GameLobbyActivity.this, state));
                         finish();
@@ -123,10 +141,16 @@ public class GameLobbyActivity extends RetainActivity implements QmDialogFragmen
         }).start();
 
         if (savedInstanceState == null) {
-            if (roomName == null) {
-                api.createRoom(userName);
-            } else {
-                api.joinRoom(roomName, userName);
+            switch (mode) {
+                case MODE_CREATE:
+                    api.createRoom(userName);
+                    break;
+                case MODE_JOIN:
+                    api.joinRoom(roomName, userName);
+                    break;
+                case MODE_NEXT:
+                    api.nextGame(state);
+                    break;
             }
         } else {
             state = savedInstanceState.getParcelable(KEY_STATE);

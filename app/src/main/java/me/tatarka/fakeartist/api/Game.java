@@ -4,7 +4,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 
 public class Game implements Parcelable {
-    public static final int MIN_PLAYERS = 2; // Just for testing, real min is 4.
+    public static final int MIN_PLAYERS = 4;
     public static final int MAX_PLAYERS = 16;
     
     public final Event event;

@@ -14,4 +14,13 @@ public class FragmentUtil {
             fm.executePendingTransactions();
         }
     }
+
+    public static void showDialogFragmentAllowingStateLoss(FragmentManager fm, DialogFragment fragment, String tag) {
+        if (fm.findFragmentByTag(tag) == null) {
+            fm.beginTransaction()
+                    .add(fragment, tag)
+                    .commitAllowingStateLoss();
+            fm.executePendingTransactions();
+        }
+    }
 }

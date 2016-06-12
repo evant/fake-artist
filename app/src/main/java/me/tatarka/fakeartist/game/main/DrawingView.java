@@ -12,15 +12,12 @@ import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 import me.tatarka.fakeartist.R;
 
 public class DrawingView extends View {
-    private static final int CANVAS_HEIGHT = 800;
-    private static final int CANVAS_WIDTH = 600;
     private static final int POINT_LIMIT = 500;
     private static final int MIN_POINT_DELTA = 8;
 
@@ -67,7 +64,7 @@ public class DrawingView extends View {
         lineDrawn = false;
         invalidate();
     }
-    
+
     public void setPlayer(int player) {
         this.player = player;
     }
@@ -75,7 +72,7 @@ public class DrawingView extends View {
     public Drawing getDrawing() {
         return drawing;
     }
-    
+
     public int getPlayer() {
         return player;
     }
@@ -150,7 +147,7 @@ public class DrawingView extends View {
         if (drawing == null) {
             return;
         }
-        canvas.scale(getWidth() / (float) CANVAS_WIDTH, getHeight() / (float) CANVAS_HEIGHT);
+        canvas.scale(getWidth() / (float) Drawing.CANVAS_WIDTH, getHeight() / (float) Drawing.CANVAS_HEIGHT);
         List<Drawing.Line> lines = drawing.lines;
         for (int i = 0, size = lines.size(); i < size; i++) {
             Drawing.Line line = lines.get(i);
@@ -170,8 +167,8 @@ public class DrawingView extends View {
         }
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN: {
-                lastX = scalePoint(event.getX(), getWidth(), CANVAS_WIDTH);
-                lastY = scalePoint(event.getY(), getHeight(), CANVAS_HEIGHT);
+                lastX = scalePoint(event.getX(), getWidth(), Drawing.CANVAS_WIDTH);
+                lastY = scalePoint(event.getY(), getHeight(), Drawing.CANVAS_HEIGHT);
                 addCurrentPoint(lastX, lastY);
             }
             break;
@@ -183,8 +180,8 @@ public class DrawingView extends View {
                     if (x < 0 || y < 0 || x > getWidth() || y > getHeight()) {
                         continue;
                     }
-                    int scaledX = scalePoint(x, getWidth(), CANVAS_WIDTH);
-                    int scaledY = scalePoint(y, getHeight(), CANVAS_HEIGHT);
+                    int scaledX = scalePoint(x, getWidth(), Drawing.CANVAS_WIDTH);
+                    int scaledY = scalePoint(y, getHeight(), Drawing.CANVAS_HEIGHT);
                     // Don't add point if we haven't moved enough. Instead, move the last point to
                     // the current position so drawing still feels smooth.
                     if (Math.abs(lastX - scaledX) < MIN_POINT_DELTA && Math.abs(lastY - scaledY) < MIN_POINT_DELTA) {
@@ -207,9 +204,16 @@ public class DrawingView extends View {
             break;
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL: {
-                lineDrawn = true;
-                if (lineDoneListener != null) {
-                    lineDoneListener.onLineDone();
+                if (currentPointsLength > 8) {
+                    lineDrawn = true;
+                    if (lineDoneListener != null) {
+                        lineDoneListener.onLineDone();
+                    }
+                } else {
+                    // We don't have enough points
+                    currentPath.reset();
+                    currentPointsLength = 0;
+                    invalidate();
                 }
             }
             break;
@@ -230,13 +234,13 @@ public class DrawingView extends View {
             height = 0;
         } else {
             if (height <= 0 && heightMode == MeasureSpec.UNSPECIFIED) {
-                height = width * CANVAS_HEIGHT / CANVAS_WIDTH;
+                height = width * Drawing.CANVAS_HEIGHT / Drawing.CANVAS_WIDTH;
             } else if (width <= 0 && widthMode == MeasureSpec.UNSPECIFIED) {
-                width = height * CANVAS_WIDTH / CANVAS_HEIGHT;
-            } else if (width * CANVAS_HEIGHT > CANVAS_WIDTH * height) {
-                width = height * CANVAS_WIDTH / CANVAS_HEIGHT;
+                width = height * Drawing.CANVAS_WIDTH / Drawing.CANVAS_HEIGHT;
+            } else if (width * Drawing.CANVAS_HEIGHT > Drawing.CANVAS_WIDTH * height) {
+                width = height * Drawing.CANVAS_WIDTH / Drawing.CANVAS_HEIGHT;
             } else {
-                height = width * CANVAS_HEIGHT / CANVAS_WIDTH;
+                height = width * Drawing.CANVAS_HEIGHT / Drawing.CANVAS_WIDTH;
             }
         }
 

@@ -12,22 +12,22 @@ import java.util.Arrays;
 import java.util.zip.DeflaterOutputStream;
 import java.util.zip.InflaterInputStream;
 
+import me.tatarka.fakeartist.game.main.Drawing;
+
 /**
  * Utilities to encode data for sending over the api.
  */
 public class Encoding {
 
     /**
-     * Encodes the deltas between points. Since points are in a line are near each other, getting
-     * their delta improves compression.
+     * Encodes the deltas between points. Since points in a line are near each other, getting their
+     * delta improves compression.
      */
     public static int[] deltaEncode(int[] points) {
         int[] out = new int[points.length];
-        int pX = points[0];
-        int pY = points[1];
-        out[0] = pX;
-        out[1] = pY;
-        for (int i = 2; i < points.length; i += 2) {
+        int pX = Drawing.CANVAS_WIDTH / 2;
+        int pY = Drawing.CANVAS_HEIGHT / 2;
+        for (int i = 0; i < points.length; i += 2) {
             int x = points[i];
             int y = points[i + 1];
             int dX = x - pX;
@@ -45,11 +45,9 @@ public class Encoding {
      */
     public static int[] deltaDecode(int[] in) {
         int[] points = new int[in.length];
-        int pX = in[0];
-        int pY = in[1];
-        points[0] = pX;
-        points[1] = pY;
-        for (int i = 2; i < in.length; i += 2) {
+        int pX = Drawing.CANVAS_WIDTH / 2;
+        int pY = Drawing.CANVAS_HEIGHT / 2;
+        for (int i = 0; i < in.length; i += 2) {
             int dX = in[i];
             int dY = in[i + 1];
             int x = pX + dX;

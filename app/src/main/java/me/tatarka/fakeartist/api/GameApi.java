@@ -1,6 +1,7 @@
 package me.tatarka.fakeartist.api;
 
 import android.graphics.Color;
+import android.util.Log;
 
 import com.shephertz.app42.gaming.multiplayer.client.WarpClient;
 import com.shephertz.app42.gaming.multiplayer.client.events.ConnectEvent;
@@ -9,6 +10,7 @@ import com.shephertz.app42.gaming.multiplayer.client.events.MatchedRoomsEvent;
 import com.shephertz.app42.gaming.multiplayer.client.events.MoveEvent;
 import com.shephertz.app42.gaming.multiplayer.client.events.RoomData;
 import com.shephertz.app42.gaming.multiplayer.client.events.RoomEvent;
+import com.shephertz.app42.gaming.multiplayer.client.listener.TurnBasedRoomListener;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -39,6 +41,7 @@ public class GameApi {
     private static final int NEXT_STATE_FIND_ROOM = 2;
     private static final int NEXT_STATE_LOCK_QM = 3;
     private static final int NEXT_STATE_ROOM_INFO = 4;
+    private static final int NEXT_STATE_START_GAME = 5;
 
     private final WarpClient client;
     private final State.Builder currentState;
@@ -115,7 +118,7 @@ public class GameApi {
                         case NEXT_STATE_LOCK_QM:
                             nextState = NEXT_STATE_ROOM_INFO;
                             String userName = roomEvent.getData().getRoomOwner();
-                            doLockQm(roomId, userName);
+                            doSetQm(roomId, userName);
                             break;
                         default:
                             doGetRoomInfo(roomId);
@@ -131,30 +134,34 @@ public class GameApi {
                     doConnected(players, liveRoomInfoEvent.getProperties());
                     boolean ready = liveRoomInfoEvent.getProperties().containsKey("ready-" + currentState.userName);
                     if (ready) {
-                        doReadyComplete();
+                        doReadyComplete(true);
                     }
-                }
-            }
-
-            @Override
-            public void onLockPropertiesDone(byte b) {
-                int state = nextState;
-                nextState = NEXT_STATE_NONE;
-                switch (state) {
-                    case NEXT_STATE_ROOM_INFO:
-                        doGetRoomInfo(currentState.roomId);
-                        break;
                 }
             }
 
             @Override
             public void onUpdatePropertyDone(LiveRoomInfoEvent liveRoomInfoEvent) {
                 if (liveRoomInfoEvent.getResult() == SUCCESS) {
-                    currentState.set(liveRoomInfoEvent.getProperties());
-                    if (isEveryoneReady(currentState.build(), liveRoomInfoEvent.getProperties())) {
-                        doStart();
-                    } else if (isReady(currentState.userName, liveRoomInfoEvent.getProperties())) {
-                        doReadyComplete();
+                    int state = nextState;
+                    nextState = NEXT_STATE_NONE;
+                    switch (state) {
+                        case NEXT_STATE_START_GAME:
+                            doStart();
+                            break;
+                        case NEXT_STATE_ROOM_INFO:
+                            doGetRoomInfo(currentState.roomId);
+                            break;
+                        default:
+                            currentState.set(liveRoomInfoEvent.getProperties());
+                            if (isEveryoneReady(currentState.build(), liveRoomInfoEvent.getProperties())) {
+                                nextState = NEXT_STATE_START_GAME;
+                                doUnreadyAll();
+                            } else if (currentState.ready) {
+                                doReadyComplete(true);
+                            } else {
+                                subject.onNext(new Game(Event.UPDATE, currentState.build()));
+                            }
+                            break;
                     }
                 }
             }
@@ -183,7 +190,7 @@ public class GameApi {
             @Override
             public void onGameStarted(String username, String roomId, String roomOwner) {
                 if (roomId.equals(currentState.roomId)) {
-                    doStarted(username);
+                    doStarted();
                 }
             }
 
@@ -191,23 +198,26 @@ public class GameApi {
             public void onUserChangeRoomProperty(RoomData roomData, String username, HashMap<String, Object> properties, HashMap<String, String> lockedProperties) {
                 if (roomData.getId().equals(currentState.roomId)) {
                     currentState.set(properties);
+                    if (!username.equals(currentState.userName)) {
+                        subject.onNext(new Game(Event.UPDATE, currentState.build()));
+                    }
                 }
             }
 
             @Override
             public void onMoveCompleted(MoveEvent moveEvent) {
-                int player = currentState.players.indexOf(moveEvent.getSender());
-                Drawing.Line lastLine = currentState.drawing.lastLine();
-                // Prevents the list getting added twice since the sill be called for your own turn finish.
-                if (lastLine == null || player != lastLine.player) {
-                    Drawing.Line line = Drawing.Line.deserialize(player, moveEvent.getMoveData());
-                    currentState.drawing = currentState.drawing.withNewLine(line);
+                if (moveEvent.getRoomId().equals(currentState.roomId)) {
+                    doMoveCompleted(moveEvent);
                 }
-                currentState.turn = moveEvent.getNextTurn();
-                subject.onNext(new Game(Event.TURN, currentState.build()));
+            }
+
+            @Override
+            public void onGameStopped(String username, String roomId) {
+                if (roomId.equals(currentState.roomId)) {
+                    doEnded();
+                }
             }
         });
-
         return subject;
     }
 
@@ -219,6 +229,13 @@ public class GameApi {
     public void joinRoom(String roomName, String userName) {
         nextState = NEXT_STATE_FIND_ROOM;
         doConnect(roomName, userName);
+    }
+
+    public void nextGame(State state) {
+        if (state.role() == State.Role.QM) {
+            String newQm = pickDefaultQm(state);
+            doSetQm(state.roomId, newQm);
+        }
     }
 
     public void leaveRoom() {
@@ -238,7 +255,9 @@ public class GameApi {
         if (line == null) {
             throw new IllegalStateException();
         }
-        client.sendMove(line.serialize(), currentState.nextTurn());
+        Turn nextTurn = currentState.nextTurn();
+        client.sendMove(line.serialize(), nextTurn.player);
+        Log.d(TAG, "sendMove: " + line.serialize() + ", " + nextTurn.player);
     }
 
     private void doConnect(String roomName, String userName) {
@@ -271,13 +290,12 @@ public class GameApi {
                 Props.of().put("roomName", roomName).build());
     }
 
-    private void doLockQm(String roomId, String userName) {
+    private void doSetQm(String roomId, String qm) {
         currentState.roomId = roomId;
-        currentState.userName = userName;
-        currentState.qm = userName;
+        currentState.qm = qm;
         HashMap<String, Object> props = new HashMap<>();
         currentState.get(props);
-        client.lockProperties(props);
+        client.updateRoomProperties(roomId, props, null);
     }
 
     private void doGetRoomInfo(String roomId) {
@@ -297,12 +315,12 @@ public class GameApi {
 
     private void doJoinedRoom(String player) {
         currentState.addPlayer(player);
-        subject.onNext(new Game(Event.PLAYER_JOINED, currentState.build()));
+        subject.onNext(new Game(Event.UPDATE, currentState.build()));
     }
 
     private void doLeftRoom(String player) {
         currentState.removePlayer(player);
-        subject.onNext(new Game(Event.PLAYER_LEFT, currentState.build()));
+        subject.onNext(new Game(Event.UPDATE, currentState.build()));
     }
 
     private void doSetup(State state, String category, String title, String fake, int[] colors) {
@@ -328,16 +346,48 @@ public class GameApi {
     }
 
     private void doStart() {
-        client.startGame();
+        Turn turn = new Turn(currentState);
+        currentState.turn = turn;
+        client.startGame(/*isDefaultLogic=*/false, turn.player);
     }
 
-    private void doReadyComplete() {
-        subject.onNext(new Game(Event.READY, currentState.build()));
+    private void doReadyComplete(boolean ready) {
+        currentState.ready = ready;
+        subject.onNext(new Game(Event.UPDATE, currentState.build()));
     }
 
-    private void doStarted(String username) {
-        currentState.turn = username;
+    private void doStarted() {
+        currentState.turn = new Turn(currentState);
         subject.onNext(new Game(Event.START, currentState.build()));
+    }
+
+    private void doMoveCompleted(MoveEvent moveEvent) {
+        int player = currentState.players.indexOf(moveEvent.getSender());
+        Drawing.Line lastLine = currentState.drawing.lastLine();
+        // Prevents the list getting added twice since the sill be called for your own turn finish.
+        if (lastLine == null || player != lastLine.player) {
+            Drawing.Line line = Drawing.Line.deserialize(player, moveEvent.getMoveData());
+            currentState.drawing = currentState.drawing.withNewLine(line);
+        }
+        Turn turn = new Turn(moveEvent.getNextTurn(), currentState);
+        currentState.turn = turn;
+        if (turn.isOver()) {
+            client.stopGame();
+        } else {
+            subject.onNext(new Game(Event.TURN, currentState.build()));
+        }
+    }
+
+    private void doEnded() {
+        subject.onNext(new Game(Event.END, currentState.build()));
+    }
+
+    private void doUnreadyAll() {
+        String[] props = new String[currentState.players.size()];
+        for (int i = 0; i < props.length; i++) {
+            props[i] = "ready-" + currentState.players.get(i);
+        }
+        client.updateRoomProperties(currentState.roomId, null, props);
     }
 
     private static String generateRoomName() {

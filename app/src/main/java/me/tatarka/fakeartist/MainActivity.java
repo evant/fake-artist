@@ -68,18 +68,5 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
         });
-
-        findViewById(R.id.draw).setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                State.Builder state = new State.Builder();
-                state.roomId = "abcdef";
-                state.roomName = "abcdef";
-                state.userName = "first";
-                state.players = Arrays.asList("first");
-                state.drawing = new Drawing(new int[]{Color.RED}, Collections.<Drawing.Line>emptyList());
-                startActivity(GameActivity.newIntent(v.getContext(), state.build()));
-            }
-        });
     }
 }

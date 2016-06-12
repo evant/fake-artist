@@ -11,7 +11,9 @@ import java.util.List;
 import me.tatarka.fakeartist.util.Encoding;
 
 public class Drawing implements Parcelable {
-
+    public static final int CANVAS_HEIGHT = 800;
+    public static final int CANVAS_WIDTH = 600;
+    
     public final int[] colors;
     public final List<Line> lines;
 

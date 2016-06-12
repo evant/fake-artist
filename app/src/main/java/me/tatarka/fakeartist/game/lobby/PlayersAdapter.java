@@ -52,16 +52,19 @@ public class PlayersAdapter extends RecyclerView.Adapter<PlayersAdapter.Holder> 
                 ? R.layout.loppy_player_item : R.layout.lobby_item;
     }
 
-    public static class Holder extends RecyclerView.ViewHolder {
+    public class Holder extends RecyclerView.ViewHolder {
         TextView name;
+        TextView qm;
 
         public Holder(View itemView) {
             super(itemView);
             name = (TextView) itemView.findViewById(R.id.username);
+            qm = (TextView) itemView.findViewById(R.id.qm);
         }
 
         void bind(String player) {
             name.setText(player);
+            qm.setVisibility(state.role(player) == State.Role.QM ? View.VISIBLE : View.GONE);
         }
     }
 }

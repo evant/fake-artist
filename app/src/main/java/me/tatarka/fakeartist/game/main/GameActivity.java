@@ -2,8 +2,6 @@ package me.tatarka.fakeartist.game.main;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.AnimatorSet;
-import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
@@ -15,6 +13,7 @@ import android.util.Log;
 import android.view.View;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.OvershootInterpolator;
+import android.widget.Button;
 import android.widget.ImageButton;
 import android.widget.TextView;
 
@@ -23,9 +22,11 @@ import javax.inject.Inject;
 import me.tatarka.fakeartist.Dagger;
 import me.tatarka.fakeartist.R;
 import me.tatarka.fakeartist.RetainActivity;
+import me.tatarka.fakeartist.api.Event;
 import me.tatarka.fakeartist.api.Game;
 import me.tatarka.fakeartist.api.GameApi;
 import me.tatarka.fakeartist.api.State;
+import me.tatarka.fakeartist.game.lobby.GameLobbyActivity;
 import me.tatarka.loader.Loader;
 import me.tatarka.loader.Result;
 import me.tatarka.loader.RxLoader;
@@ -45,7 +46,7 @@ public class GameActivity extends RetainActivity {
     private State state;
     private BottomSheetBehavior bottomSheet;
     private DrawingView drawingView;
-    private TextView yourTurn;
+    private TextView status;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -60,11 +61,14 @@ public class GameActivity extends RetainActivity {
         final View overlay = findViewById(R.id.overlay);
         final View info = findViewById(R.id.info);
         final View controls = findViewById(R.id.controls);
+        final View gameEndControls = findViewById(R.id.end_game_controls);
         bottomSheet = BottomSheetBehavior.from(info);
         TextView category = (TextView) info.findViewById(R.id.category);
         TextView title = (TextView) info.findViewById(R.id.title);
         TextView role = (TextView) info.findViewById(R.id.role);
-        yourTurn = (TextView) info.findViewById(R.id.your_turn);
+        status = (TextView) info.findViewById(R.id.status);
+        Button newGame = (Button) findViewById(R.id.button_new_game);
+        ImageButton share = (ImageButton) findViewById(R.id.button_share);
 
         if (savedInstanceState == null) {
             drawingView.setDrawing(state.drawing);
@@ -198,16 +202,50 @@ public class GameActivity extends RetainActivity {
             }
         });
 
+        newGame.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                startActivity(GameLobbyActivity.newIntentNext(v.getContext(), state));
+                finish();
+            }
+        });
+
         loaderManager().init(0, RxLoader.create(api.connect()), new Loader.CallbacksAdapter<Result<Game>>() {
             @Override
             public void onLoaderResult(Result<Game> result) {
                 if (result.isSuccess()) {
                     Game game = result.getSuccess();
+                    if (game.event == Event.UPDATE) {
+                        // ignore, these only matter in the lobby.
+                        return;
+                    }
                     state = game.state;
-                    boolean isYourTurn = state.userName.equals(state.turn);
-                    drawingView.setEnabled(isYourTurn);
                     drawingView.setDrawing(game.state.drawing);
-                    yourTurn.setVisibility(isYourTurn ? View.VISIBLE : View.GONE);
+                    switch (game.event) {
+                        case START:
+                        case TURN:
+                            boolean isYourTurn = state.userName.equals(state.turn.player);
+                            drawingView.setEnabled(isYourTurn);
+                            status.setText(isYourTurn ? getString(R.string.your_turn) : state.turn.player);
+                            status.setAlpha(isYourTurn ? 1f : 0.8f);
+                            break;
+                        case END:
+                            drawingView.setEnabled(false);
+                            status.setText(R.string.game_end);
+                            gameEndControls.setVisibility(View.VISIBLE);
+                            gameEndControls.setTranslationY(-gameEndControls.getHeight());
+                            gameEndControls.animate()
+                                    .translationY(0)
+                                    .setDuration(300)
+                                    .setInterpolator(new OvershootInterpolator())
+                                    .setListener(new AnimatorListenerAdapter() {
+                                        @Override
+                                        public void onAnimationEnd(Animator animation) {
+                                            gameEndControls.setTranslationY(0);
+                                        }
+                                    });
+                            break;
+                    }
                 } else {
                     Throwable error = result.getError();
                     Log.e(TAG, error.getMessage(), error);
@@ -222,7 +260,7 @@ public class GameActivity extends RetainActivity {
             }
         }).start();
     }
-    
+
     @Override
     public void onBackPressed() {
         if (bottomSheet.getState() == BottomSheetBehavior.STATE_EXPANDED) {

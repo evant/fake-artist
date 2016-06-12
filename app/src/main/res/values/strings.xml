@@ -20,4 +20,11 @@
     <string name="artist">Artist</string>
     <string name="setup">Setup</string>
     <string name="your_turn">Your Turn</string>
+    <string name="who_won">Who Won?</string>
+    <string name="new_game">New Game</string>
+    <string name="share">Share</string>
+    <string name="undo">Undo</string>
+    <string name="accept">Accept</string>
+    <string name="game_end">Game End</string>
+    <string name="qm">QM</string>
 </resources>

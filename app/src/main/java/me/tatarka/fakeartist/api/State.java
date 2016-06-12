@@ -21,10 +21,11 @@ public class State implements Parcelable {
     public final String category;
     public final String title;
     public final List<String> players;
-    public final String turn;
+    public final boolean ready;
+    public final Turn turn;
     public final Drawing drawing;
 
-    private State(String roomId, String roomName, String userName, String qm, String fake, String category, String title, List<String> players, String turn, Drawing drawing) {
+    private State(String roomId, String roomName, String userName, String qm, String fake, String category, String title, List<String> players, boolean ready, Turn turn, Drawing drawing) {
         this.roomId = roomId;
         this.roomName = roomName;
         this.userName = userName;
@@ -33,6 +34,7 @@ public class State implements Parcelable {
         this.category = category;
         this.title = title;
         this.players = Collections.unmodifiableList(new ArrayList<>(players));
+        this.ready = ready;
         this.turn = turn;
         this.drawing = drawing;
     }
@@ -73,7 +75,8 @@ public class State implements Parcelable {
         public String category;
         public String title;
         public List<String> players = new ArrayList<>();
-        public String turn;
+        public boolean ready;
+        public Turn turn;
         public Drawing drawing;
 
         public Builder() {
@@ -92,6 +95,7 @@ public class State implements Parcelable {
             category = state.category;
             title = state.title;
             players = new ArrayList<>(state.players);
+            ready = state.ready;
             turn = state.turn;
             drawing = state.drawing;
         }
@@ -109,6 +113,11 @@ public class State implements Parcelable {
             if (props.containsKey("title")) {
                 title = (String) props.get("title");
             }
+            if (props.containsKey("ready-" + userName)) {
+                ready = true;
+            } else {
+                ready = false;
+            }
             if (props.containsKey("colors")) {
                 int[] colors = parseColors((String) props.get("colors"));
                 drawing = new Drawing(colors, Collections.<Drawing.Line>emptyList());
@@ -120,6 +129,9 @@ public class State implements Parcelable {
             props.put("fake", fake);
             props.put("category", category);
             props.put("title", title);
+            if (ready) {
+                props.put("ready-" + userName, true);
+            }
             if (drawing != null) {
                 props.put("colors", serializeColors(drawing.colors));
             }
@@ -145,7 +157,7 @@ public class State implements Parcelable {
         }
 
         public State build() {
-            return new State(roomId, roomName, userName, qm, fake, category, title, players, turn, drawing);
+            return new State(roomId, roomName, userName, qm, fake, category, title, players, ready, turn, drawing);
         }
 
         private static int[] parseColors(String str) {
@@ -177,10 +189,15 @@ public class State implements Parcelable {
             return sb.toString();
         }
 
-        public String nextTurn() {
+        public Turn nextTurn() {
+            String nextPlayer;
             int index = players.indexOf(userName);
-            int nextIndex = (index + 1) % players.size();
-            return players.get(nextIndex);
+            do {
+                int nextIndex = (index + 1) % players.size();
+                nextPlayer = players.get(nextIndex);
+                index = nextIndex;
+            } while (qm.equals(nextPlayer));
+            return turn.next(nextPlayer);
         }
     }
 
@@ -193,7 +210,8 @@ public class State implements Parcelable {
         category = in.readString();
         title = in.readString();
         players = in.createStringArrayList();
-        turn = in.readString();
+        ready = in.readByte() == 1;
+        turn = in.readParcelable(getClass().getClassLoader());
         drawing = in.readParcelable(getClass().getClassLoader());
     }
 
@@ -207,7 +225,8 @@ public class State implements Parcelable {
         dest.writeString(category);
         dest.writeString(title);
         dest.writeStringList(players);
-        dest.writeString(turn);
+        dest.writeByte((byte) (ready ? 1 : 0));
+        dest.writeParcelable(turn, flags);
         dest.writeParcelable(drawing, flags);
     }
 
